@@ -1,6 +1,10 @@
 # VRM_BlendShapeClipEditor
 VRMの表情プリセットを編集するやつ
 
+## 見る所
+私が書いた部分は以下にまとめてます。  
+https://github.com/xelloss120/VRM_BlendShapeClipEditor/tree/master/Assets/Scripts
+
 ## 使い方
 https://docs.google.com/presentation/d/1HqSHfY-egVGz4vE6aU4Y4r0ZoHDyE67uV9lUKyl2kCs/edit?usp=sharing
 
