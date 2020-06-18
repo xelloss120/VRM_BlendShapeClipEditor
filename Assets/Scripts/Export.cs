@@ -21,6 +21,10 @@ public class Export : MonoBehaviour
         {
             return;
         }
+        else if (string.Compare(System.IO.Path.GetExtension(path), ".vrm", true) != 0)
+        {
+            path += ".vrm";
+        }
 
         Vrm.Save(path);
         Csv.Save(path);
