@@ -54,24 +54,7 @@ public class DandD : MonoBehaviour
     /// </summary>
     public void DebugVrm()
     {
-        switch (Dropdown.value)
-        {
-            case 1:
-                SetOnFile("/../_Debug/ModelA.vrm");
-                break;
-            case 2:
-                SetOnFile("/../_Debug/ModelB.vrm");
-                break;
-            case 3:
-                SetOnFile("/../_Debug/ModelC.vrm");
-                break;
-            case 4:
-                SetOnFile("/../_Debug/ModelD.vrm");
-                break;
-            case 5:
-                SetOnFile("/../_Debug/ModelE.vrm");
-                break;
-        }
+        SetOnFile("/../_Debug/" + Dropdown.options[Dropdown.value].text + ".vrm");
     }
 
     /// <summary>
