@@ -10,13 +10,13 @@ namespace VRM.Samples
     public class VRMRuntimeLoader : MonoBehaviour
     {
         [SerializeField]
-        bool m_loadAsync;
+        bool m_loadAsync = default;
 
         [SerializeField, Header("GUI")]
-        CanvasManager m_canvas;
+        CanvasManager m_canvas = default;
 
         [SerializeField]
-        LookTarget m_faceCamera;
+        LookTarget m_faceCamera = default;
 
         [SerializeField, Header("loader")]
         UniHumanoid.HumanPoseTransfer m_source;
@@ -74,6 +74,8 @@ namespace VRM.Samples
         {
 #if UNITY_STANDALONE_WIN
             var path = FileDialogForWindows.FileDialog("open VRM", ".vrm");
+#elif UNITY_EDITOR
+            var path = UnityEditor.EditorUtility.OpenFilePanel("Open VRM", "", "vrm");
 #else
             var path = Application.dataPath + "/default.vrm";
 #endif
@@ -115,6 +117,8 @@ namespace VRM.Samples
         {
 #if UNITY_STANDALONE_WIN
             var path = FileDialogForWindows.FileDialog("open VRM", ".vrm");
+#elif UNITY_EDITOR
+            var path = UnityEditor.EditorUtility.OpenFilePanel("Open VRM", "", "vrm");
 #else
             var path = Application.dataPath + "/default.vrm";
 #endif
@@ -179,6 +183,12 @@ namespace VRM.Samples
         {
 #if UNITY_STANDALONE_WIN
             var path = FileDialogForWindows.FileDialog("open BVH", ".bvh");
+            if (!string.IsNullOrEmpty(path))
+            {
+                LoadBvh(path);
+            }
+#elif UNITY_EDITOR
+            var path = UnityEditor.EditorUtility.OpenFilePanel("Open BVH", "", "bvh");
             if (!string.IsNullOrEmpty(path))
             {
                 LoadBvh(path);

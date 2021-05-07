@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using UniGLTF;
 using UnityEngine;
 using UnityEngine.UI;
 using VRM;
@@ -8,9 +9,9 @@ namespace VRM.Samples
 
     public class VRMRuntimeExporter : MonoBehaviour
     {
-        [SerializeField] Button m_loadButton;
+        [SerializeField] Button m_loadButton = default;
 
-        [SerializeField] Button m_exportButton;
+        [SerializeField] Button m_exportButton = default;
 
         GameObject m_model;
 
@@ -32,6 +33,8 @@ namespace VRM.Samples
         {
 #if UNITY_STANDALONE_WIN
             var path = FileDialogForWindows.FileDialog("open VRM", ".vrm");
+#elif UNITY_EDITOR
+            var path = UnityEditor.EditorUtility.OpenFilePanel("Open VRM", "", "vrm");
 #else
         var path = Application.dataPath + "/default.vrm";
 #endif
@@ -88,7 +91,7 @@ namespace VRM.Samples
                 return;
             }
 
-            var vrm = VRMExporter.Export(m_model);
+            var vrm = VRMExporter.Export(UniGLTF.MeshExportSettings.Default, m_model);
             var bytes = vrm.ToGlbBytes();
             File.WriteAllBytes(path, bytes);
             Debug.LogFormat("export to {0}", path);

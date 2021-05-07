@@ -12,58 +12,58 @@ namespace VRM.Samples
     {
         #region UI
         [SerializeField]
-        Text m_version;
+        Text m_version = default;
 
         [SerializeField]
-        Button m_open;
+        Button m_open = default;
 
         [SerializeField]
-        Toggle m_enableLipSync;
+        Toggle m_enableLipSync = default;
 
         [SerializeField]
-        Toggle m_enableAutoBlink;
+        Toggle m_enableAutoBlink = default;
         #endregion
 
         [SerializeField]
-        HumanPoseTransfer m_src;
+        HumanPoseTransfer m_src = default;
 
         [SerializeField]
-        GameObject m_target;
+        GameObject m_target = default;
 
         [SerializeField]
-        GameObject Root;
+        GameObject Root = default;
 
         [Serializable]
-        struct TextFields
+        class TextFields
         {
             [SerializeField, Header("Info")]
-            Text m_textModelTitle;
+            Text m_textModelTitle = default;
             [SerializeField]
-            Text m_textModelVersion;
+            Text m_textModelVersion = default;
             [SerializeField]
-            Text m_textModelAuthor;
+            Text m_textModelAuthor = default;
             [SerializeField]
-            Text m_textModelContact;
+            Text m_textModelContact = default;
             [SerializeField]
-            Text m_textModelReference;
+            Text m_textModelReference = default;
             [SerializeField]
-            RawImage m_thumbnail;
+            RawImage m_thumbnail = default;
 
             [SerializeField, Header("CharacterPermission")]
-            Text m_textPermissionAllowed;
+            Text m_textPermissionAllowed = default;
             [SerializeField]
-            Text m_textPermissionViolent;
+            Text m_textPermissionViolent = default;
             [SerializeField]
-            Text m_textPermissionSexual;
+            Text m_textPermissionSexual = default;
             [SerializeField]
-            Text m_textPermissionCommercial;
+            Text m_textPermissionCommercial = default;
             [SerializeField]
-            Text m_textPermissionOther;
+            Text m_textPermissionOther = default;
 
             [SerializeField, Header("DistributionLicense")]
-            Text m_textDistributionLicense;
+            Text m_textDistributionLicense = default;
             [SerializeField]
-            Text m_textDistributionOther;
+            Text m_textDistributionOther = default;
 
             public void Start()
             {
@@ -106,21 +106,21 @@ namespace VRM.Samples
             }
         }
         [SerializeField]
-        TextFields m_texts;
+        TextFields m_texts = default;
 
         [Serializable]
-        struct UIFields
+        class UIFields
         {
             [SerializeField]
-            Toggle ToggleMotionTPose;
+            Toggle ToggleMotionTPose = default;
 
             [SerializeField]
-            Toggle ToggleMotionBVH;
+            Toggle ToggleMotionBVH = default;
 
             [SerializeField]
-            ToggleGroup ToggleMotion;
+            ToggleGroup ToggleMotion = default;
 
-            Toggle m_activeToggleMotion;
+            Toggle m_activeToggleMotion = default;
 
             public void UpdateToggle(Action onBvh, Action onTPose)
             {
@@ -144,10 +144,10 @@ namespace VRM.Samples
             }
         }
         [SerializeField]
-        UIFields m_ui;
+        UIFields m_ui = default;
 
         [SerializeField]
-        HumanPoseClip m_pose;
+        HumanPoseClip m_pose = default;
 
         private void Reset()
         {
@@ -167,6 +167,7 @@ namespace VRM.Samples
         }
 
         HumanPoseTransfer m_loaded;
+        VRMBlendShapeProxy m_proxy;
 
         AIUEO m_lipSync;
         bool m_enableLipSyncValue;
@@ -235,6 +236,11 @@ namespace VRM.Samples
             }
 
             m_ui.UpdateToggle(EnableBvh, EnableTPose);
+
+            if (m_proxy != null)
+            {
+                m_proxy.Apply();
+            }
         }
 
         void EnableBvh()
@@ -258,7 +264,9 @@ namespace VRM.Samples
         void OnOpenClicked()
         {
 #if UNITY_STANDALONE_WIN
-            var path = FileDialogForWindows.FileDialog("open VRM", "vrm", "glb", "bvh");
+            var path = FileDialogForWindows.FileDialog("open VRM", "vrm", "glb", "bvh", "gltf", "zip");
+#elif UNITY_EDITOR
+            var path = UnityEditor.EditorUtility.OpenFilePanel("Open VRM", "", "vrm");
 #else
             var path = Application.dataPath + "/default.vrm";
 #endif
@@ -273,6 +281,7 @@ namespace VRM.Samples
                 case ".gltf":
                 case ".glb":
                 case ".vrm":
+                case ".zip":
                     LoadModel(path);
                     break;
 
@@ -320,6 +329,19 @@ namespace VRM.Samples
                         break;
                     }
 
+                case ".gltf":
+                case ".zip":
+                    {
+                        var context = new UniGLTF.ImporterContext();
+                        context.Parse(path);
+                        context.Load();
+                        context.ShowMeshes();
+                        context.EnableUpdateWhenOffscreen();
+                        context.ShowMeshes();
+                        SetModel(context.Root);
+                        break;
+                    }
+
                 default:
                     Debug.LogWarningFormat("unknown file type: {0}", path);
                     break;
@@ -359,6 +381,8 @@ namespace VRM.Samples
                 {
                     animation.Play(animation.clip.name);
                 }
+
+                m_proxy = go.GetComponent<VRMBlendShapeProxy>();
             }
         }
 

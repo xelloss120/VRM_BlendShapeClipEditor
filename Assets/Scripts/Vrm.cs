@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
+using UniGLTF;
 using VRM;
 using VRMLoader;
 
@@ -83,7 +84,7 @@ public class Vrm : MonoBehaviour
         Meta.Set();
         BlendShape.Set();
 
-        var vrm = VRMExporter.Export(VRM);
+        var vrm = VRMExporter.Export(MeshExportSettings.Default, VRM);
         var bytes = vrm.ToGlbBytes();
         File.WriteAllBytes(path, bytes);
     }

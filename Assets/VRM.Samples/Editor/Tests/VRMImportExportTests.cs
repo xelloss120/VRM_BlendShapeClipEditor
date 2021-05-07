@@ -3,7 +3,7 @@ using System.IO;
 using UniGLTF;
 using UniJSON;
 using UnityEngine;
-
+using MeshUtility;
 
 namespace VRM.Samples
 {
@@ -16,6 +16,13 @@ namespace VRM.Samples
             var p = Utf8String.From(key);
             var bytes = f.GetStoreBytes();
             node.SetValue(p, bytes);
+        }
+
+        public static string ToJson(this glTF self)
+        {
+            var f = new JsonFormatter();
+            GltfSerializer.Serialize(f, self);
+            return f.ToString();
         }
     }
 
@@ -81,7 +88,7 @@ namespace VRM.Samples
                 */
                 importedJson.RemoveValue(Utf8String.From("/bufferViews/*/byteStride"));
 
-                var vrm = VRMExporter.Export(context.Root);
+                var vrm = VRMExporter.Export(UniGLTF.MeshExportSettings.Default, context.Root);
 
                 // TODO: Check contents in JSON
                 /*var exportJson = */
@@ -89,7 +96,7 @@ namespace VRM.Samples
 
                 // TODO: Check contents in JSON
                 /*var newExportedJson = */
-                JsonParser.Parse(JsonSchema.FromType<glTF>().Serialize(vrm));
+                // JsonParser.Parse(JsonSchema.FromType<glTF>().Serialize(vrm));
 
                 /*
                 foreach (var kv in importJson.Diff(exportJson))
@@ -131,12 +138,12 @@ namespace VRM.Samples
 
             // 生成シリアライザでJSON化する
             var f = new JsonFormatter();
-            f.GenSerialize(context.GLTF);
+            GltfSerializer.Serialize(f, context.GLTF);
             var parsed = f.ToString().ParseAsJson();
             var newJson = parsed.ToString("  ");
 
-            File.WriteAllText("old.json", oldJson);
-            File.WriteAllText("new.json", newJson);
+            // File.WriteAllText("old.json", oldJson);
+            // File.WriteAllText("new.json", newJson);
 
             // 比較
             Assert.AreEqual(oldJson.ParseAsJson().ToString(), newJson.ParseAsJson().ToString());
@@ -145,7 +152,7 @@ namespace VRM.Samples
             var ff = new JsonFormatter();
             var des = GltfDeserializer.Deserialize(parsed);
             ff.Clear();
-            ff.GenSerialize(des);
+            GltfSerializer.Serialize(ff, des);
             var desJson = ff.ToString().ParseAsJson().ToString("  ");
             Assert.AreEqual(oldJson.ParseAsJson().ToString(), desJson.ParseAsJson().ToString());
         }
