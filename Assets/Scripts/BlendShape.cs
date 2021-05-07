@@ -12,6 +12,13 @@ public class BlendShape : MonoBehaviour
     [SerializeField] GameObject IsBinaryPrefab;
     [SerializeField] GameObject BlendShapePrefab;
 
+    [SerializeField] GameObject NameInput;
+    [SerializeField] GameObject AddButton;
+    [SerializeField] GameObject CancelButton;
+
+    [SerializeField] GameObject DeleteButton;
+    [SerializeField] GameObject DeleteCheckPlane;
+
     int PreviousIndex;
     VRMBlendShapeProxy Proxy;
 
@@ -30,6 +37,7 @@ public class BlendShape : MonoBehaviour
             var item = new Dropdown.OptionData(clips[i].BlendShapeName);
             Dropdown.options.Add(item);
         }
+        Dropdown.options.Add(new Dropdown.OptionData("追加"));
         Dropdown.RefreshShownValue();
 
         PreviousIndex = 0;
@@ -52,10 +60,14 @@ public class BlendShape : MonoBehaviour
     /// </summary>
     public void DropdownChanged()
     {
-        SetClip(PreviousIndex);
-        SetContent();
+        if (Dropdown.value + 1 < Dropdown.options.Count)
+        {
+            // "追加"より上なら
+            SetClip(PreviousIndex);
+            SetContent();
 
-        PreviousIndex = Dropdown.value;
+            PreviousIndex = Dropdown.value;
+        }
     }
 
     /// <summary>
@@ -166,5 +178,83 @@ public class BlendShape : MonoBehaviour
 
         clip.Values = values.ToArray();
         Proxy.BlendShapeAvatar.Clips[index] = clip;
+    }
+
+    /// <summary>
+    /// 追加を選択
+    /// </summary>
+    public void AddFunc()
+    {
+        if (Dropdown.value + 1 < Dropdown.options.Count)
+        {
+            // "追加"より上なら
+            return;
+        }
+
+        NameInput.GetComponent<InputField>().text = "";
+
+        NameInput.SetActive(true);
+        AddButton.SetActive(true);
+        CancelButton.SetActive(true);
+        DeleteButton.SetActive(false);
+    }
+
+    /// <summary>
+    /// Addボタン
+    /// </summary>
+    public void AddButtonFunc()
+    {
+        NameInput.SetActive(false);
+        AddButton.SetActive(false);
+        CancelButton.SetActive(false);
+        DeleteButton.SetActive(true);
+        
+        var clip = new BlendShapeClip();
+        clip.BlendShapeName = NameInput.GetComponent<InputField>().text;
+        Proxy.BlendShapeAvatar.Clips.Add(clip);
+        Get(); // Dropdownの更新
+
+        // 追加したアイテムを選択状態に設定
+        Dropdown.value = Proxy.BlendShapeAvatar.Clips.Count - 1;
+    }
+
+    /// <summary>
+    /// Cancelボタン
+    /// </summary>
+    public void CancelButtonFunc()
+    {
+        NameInput.SetActive(false);
+        AddButton.SetActive(false);
+        CancelButton.SetActive(false);
+        DeleteButton.SetActive(true);
+
+        // 追加を選択する前の選択状態に設定
+        Dropdown.value = PreviousIndex;
+    }
+
+    /// <summary>
+    /// Deleteボタン
+    /// </summary>
+    public void DeleteButtonFunc()
+    {
+        DeleteCheckPlane.SetActive(true);
+    }
+
+    /// <summary>
+    /// DeleteCheckPlaneのOKボタン
+    /// </summary>
+    public void DeleteCheckPlaneOkButton()
+    {
+        DeleteCheckPlane.SetActive(false);
+        Proxy.BlendShapeAvatar.Clips.Remove(Proxy.BlendShapeAvatar.Clips[PreviousIndex]);
+        Get(); // Dropdownの更新
+    }
+
+    /// <summary>
+    /// DeleteCheckPlaneのNGボタン
+    /// </summary>
+    public void DeleteCheckPlaneNgButton()
+    {
+        DeleteCheckPlane.SetActive(false);
     }
 }
