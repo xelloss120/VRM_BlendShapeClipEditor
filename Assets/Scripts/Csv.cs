@@ -172,6 +172,6 @@ public class Csv : MonoBehaviour
         {
             csv += String.Join(",", line) + "\n";
         }
-        File.WriteAllText(path.Replace(".vrm", ".csv"), csv);
+        File.WriteAllText(path, csv);
     }
 }
