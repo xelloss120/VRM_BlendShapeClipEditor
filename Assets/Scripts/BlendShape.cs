@@ -60,13 +60,20 @@ public class BlendShape : MonoBehaviour
     /// </summary>
     public void DropdownChanged()
     {
+        SetClip(PreviousIndex);
         if (Dropdown.value + 1 < Dropdown.options.Count)
         {
             // "追加"より上なら
-            SetClip(PreviousIndex);
-            SetContent();
-
             PreviousIndex = Dropdown.value;
+            SetContent();
+        }
+        else
+        {
+            // "追加"なら
+            foreach (Transform child in Content.transform)
+            {
+                Destroy(child.gameObject);
+            }
         }
     }
 
@@ -96,7 +103,7 @@ public class BlendShape : MonoBehaviour
 
         // IsBinaryのUI設定
         var isBinary = Instantiate(IsBinaryPrefab);
-        isBinary.transform.parent = Content.transform;
+        isBinary.transform.SetParent(Content.transform);
         isBinary.transform.Find("Toggle").GetComponent<Toggle>().isOn = clip.IsBinary;
 
         // ブレンドシェイプのUI設定
@@ -105,7 +112,7 @@ public class BlendShape : MonoBehaviour
             for (int i = 0; i < mesh.sharedMesh.blendShapeCount; i++)
             {
                 var blendShape = Instantiate(BlendShapePrefab);
-                blendShape.transform.parent = Content.transform;
+                blendShape.transform.SetParent(Content.transform);
 
                 var text = blendShape.transform.Find("Text");
                 var slider = blendShape.transform.Find("Slider");
@@ -191,12 +198,13 @@ public class BlendShape : MonoBehaviour
             return;
         }
 
-        NameInput.GetComponent<InputField>().text = "";
-
         NameInput.SetActive(true);
         AddButton.SetActive(true);
         CancelButton.SetActive(true);
         DeleteButton.SetActive(false);
+
+        NameInput.GetComponent<InputField>().Select();
+        NameInput.GetComponent<InputField>().text = "";
     }
 
     /// <summary>
@@ -209,7 +217,7 @@ public class BlendShape : MonoBehaviour
         CancelButton.SetActive(false);
         DeleteButton.SetActive(true);
         
-        var clip = new BlendShapeClip();
+        var clip = ScriptableObject.CreateInstance<BlendShapeClip>();
         clip.BlendShapeName = NameInput.GetComponent<InputField>().text;
         Proxy.BlendShapeAvatar.Clips.Add(clip);
         Get(); // Dropdownの更新
@@ -229,7 +237,9 @@ public class BlendShape : MonoBehaviour
         DeleteButton.SetActive(true);
 
         // 追加を選択する前の選択状態に設定
-        Dropdown.value = PreviousIndex;
+        var tmp = PreviousIndex;
+        PreviousIndex = 0; // 上手く戻せない不具合対策の小細工
+        Dropdown.value = tmp;
     }
 
     /// <summary>

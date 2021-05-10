@@ -2,6 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using VRM;
 using UniGLTF;
 
@@ -9,6 +10,9 @@ public class Csv : MonoBehaviour
 {
     [SerializeField] Vrm Vrm;
     [SerializeField] BlendShape BlendShape;
+
+    [SerializeField] GameObject CsvErrorCheckPlane;
+    [SerializeField] Text Text;
 
     /// <summary>
     /// csvの行列
@@ -45,7 +49,8 @@ public class Csv : MonoBehaviour
         }
         reader.Close();
 
-        var index = CSV_ROW_WEIGHT;
+        // ブレンドシェイプの一致性確認
+        var index = 2;
         var meshes = Vrm.VRM.GetComponentsInChildren<SkinnedMeshRenderer>();
         foreach (SkinnedMeshRenderer mesh in meshes)
         {
@@ -57,25 +62,29 @@ public class Csv : MonoBehaviour
                     list[index][CSV_COL_INDEX] != i.ToString() ||
                     list[index][CSV_COL_NAME] != meshName)
                 {
-                    // オブジェクトのパス、インデックス、ブレンドシェイプ名が一致しなければ中断
+                    Text.text = "メッシュのパス\nブレンドシェイプ名\nが不一致";
+                    CsvErrorCheckPlane.SetActive(true);
                     return;
                 }
                 index++;
             }
         }
-
-        var proxy = Vrm.VRM.GetComponent<VRMBlendShapeProxy>();
-        var clips = proxy.BlendShapeAvatar.Clips;
-        if (clips.Count != list[CSV_ROW_LABEL].Count - CSV_COL_WEIGHT)
+        if (list.Count != index)
         {
-            // 表情プリセットの数が一致しなければ中断
+            Text.text = "ブレンドシェイプ数が不一致\n";
+            Text.text += "CSV = " + (list.Count - 2) + "\n";
+            Text.text += "VRM = " + (index - 2) + "\n";
+            CsvErrorCheckPlane.SetActive(true);
             return;
         }
 
         // 表情プリセット設定
+        var proxy = Vrm.VRM.GetComponent<VRMBlendShapeProxy>();
+        proxy.BlendShapeAvatar.Clips.Clear();
         for (int col = CSV_COL_WEIGHT; col < list[CSV_ROW_LABEL].Count; col++)
         {
-            var clip = clips[col - CSV_COL_WEIGHT];
+            var clip = ScriptableObject.CreateInstance<BlendShapeClip>();
+            clip.BlendShapeName = list[CSV_ROW_LABEL][col];
             clip.IsBinary = bool.Parse(list[CSV_ROW_ISBINARY][col]);
 
             var values = new List<BlendShapeBinding>();
@@ -93,7 +102,7 @@ public class Csv : MonoBehaviour
             }
 
             clip.Values = values.ToArray();
-            proxy.BlendShapeAvatar.Clips[col - CSV_COL_WEIGHT] = clip;
+            proxy.BlendShapeAvatar.Clips.Add(clip);
         }
 
         BlendShape.Get();
@@ -173,5 +182,10 @@ public class Csv : MonoBehaviour
             csv += String.Join(",", line) + "\n";
         }
         File.WriteAllText(path, csv);
+    }
+
+    public void CsvErrorCheckPlaneOkButton()
+    {
+        CsvErrorCheckPlane.SetActive(false);
     }
 }
