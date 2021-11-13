@@ -4,12 +4,31 @@ using System.Linq;
 using UniGLTF;
 using UniGLTF.ShaderPropExporter;
 using UnityEngine;
-
+using VRMShaders;
+using ColorSpace = VRMShaders.ColorSpace;
 
 namespace VRM
 {
     public class VRMMaterialExporter : MaterialExporter
     {
+        public static string VrmMaterialName(string shaderName)
+        {
+            switch (shaderName)
+            {
+                case "VRM/UnlitTexture":
+                case "VRM/UnlitTransparent":
+                case "VRM/UnlitCutout":
+                case "VRM/UnlitTransparentZWrite":
+                    return "KHR_materials_unlit";
+
+                case "VRM/MToon":
+                    return "MToon";
+
+                default:
+                    return null;
+            }
+        }
+
         protected override glTFMaterial CreateMaterial(Material m)
         {
             switch (m.shader.name)
@@ -107,7 +126,7 @@ namespace VRM
             // "Queue",
         };
 
-        public static glTF_VRM_Material CreateFromMaterial(Material m, List<Texture> textures)
+        public static glTF_VRM_Material CreateFromMaterial(Material m, ITextureExporter textureExporter)
         {
             var material = new glTF_VRM_Material
             {
@@ -142,7 +161,8 @@ namespace VRM
                     {
                         case ShaderPropertyType.Color:
                             {
-                                var value = m.GetColor(kv.Key).ToArray();
+                                // No color conversion. Because color property is serialized to raw float array.
+                                var value = m.GetColor(kv.Key).ToFloat4(ColorSpace.Linear, ColorSpace.Linear);
                                 material.vectorProperties.Add(kv.Key, value);
                             }
                             break;
@@ -160,7 +180,17 @@ namespace VRM
                                 var texture = m.GetTexture(kv.Key);
                                 if (texture != null)
                                 {
-                                    var value = textures.IndexOf(texture);
+                                    var value = -1;
+                                    var isNormalMap = kv.Key == "_BumpMap";
+                                    if (isNormalMap)
+                                    {
+                                        value = textureExporter.RegisterExportingAsNormal(texture);
+                                    }
+                                    else
+                                    {
+                                        var needsAlpha = kv.Key == "_MainTex";
+                                        value = textureExporter.RegisterExportingAsSRgb(texture, needsAlpha);
+                                    }
                                     if (value == -1)
                                     {
                                         Debug.LogFormat("not found {0}", texture.name);

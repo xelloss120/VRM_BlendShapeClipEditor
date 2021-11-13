@@ -7,7 +7,7 @@ using UnityEngine;
 namespace VRM
 {
     [Serializable]
-    public class CurveMapper
+    public class CurveMapper : IEquatable<CurveMapper>
     {
         public AnimationCurve Curve = AnimationCurve.Linear(0, 0, 1.0f, 1.0f);
 
@@ -16,12 +16,6 @@ namespace VRM
 
         [Range(0, 90.0f)]
         public float CurveYRangeDegree;
-
-        /*
-        public CurveMapper() : this(90.0f, 10.0f)
-        {
-        }
-        */
 
         public CurveMapper(float xRange, float yRange)
         {
@@ -35,6 +29,12 @@ namespace VRM
             {
                 CurveXRangeDegree = 90.0f;
             }
+        }
+
+        public void Assign(CurveMapper mapper)
+        {
+            CurveXRangeDegree = mapper.CurveXRangeDegree;
+            CurveYRangeDegree = mapper.CurveYRangeDegree;
         }
 
         public void Apply(glTF_VRM_DegreeMap degreeMap)
@@ -70,6 +70,27 @@ namespace VRM
                 src = CurveXRangeDegree;
             }
             return Curve.Evaluate(src / CurveXRangeDegree) * CurveYRangeDegree;
+        }
+
+        public bool Equals(CurveMapper other)
+        {
+            if (CurveXRangeDegree != other.CurveXRangeDegree) return false;
+            if (CurveYRangeDegree != other.CurveYRangeDegree) return false;
+            return true;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is CurveMapper mapper)
+            {
+                return Equals(mapper);
+            }
+            return base.Equals(obj);
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
         }
     }
 }

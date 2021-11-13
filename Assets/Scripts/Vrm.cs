@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using UniGLTF;
 using VRM;
 using VRMLoader;
+using VRMShaders;
 
 public class Vrm : MonoBehaviour
 {
@@ -28,8 +29,9 @@ public class Vrm : MonoBehaviour
     {
         var bytes = File.ReadAllBytes(path);
 
-        Context = new VRMImporterContext();
-        Context.ParseGlb(bytes);
+        var data = new GlbFileParser(path).Parse();
+        var vrm = new VRMData(data);
+        Context = new VRMImporterContext(vrm);
 
         // VRMLoaderUI
         var modalObject = Instantiate(m_modalWindowPrefab, m_canvas.transform) as GameObject;
@@ -51,10 +53,11 @@ public class Vrm : MonoBehaviour
             Destroy(VRM);
         }
 
-        Context.Load();
-        Context.ShowMeshes();
+        var loaded = default(RuntimeGltfInstance);
+        loaded = Context.Load();
+        loaded.ShowMeshes();
 
-        VRM = Context.Root;
+        VRM = loaded.Root;
 
         // 3Dビューの初期表示位置を頭に設定
         var anim = VRM.GetComponent<Animator>();
@@ -84,7 +87,7 @@ public class Vrm : MonoBehaviour
         Meta.Set();
         BlendShape.Set();
 
-        var vrm = VRMExporter.Export(MeshExportSettings.Default, VRM);
+        var vrm = VRMExporter.Export(new GltfExportSettings(), VRM, new RuntimeTextureSerializer());
         var bytes = vrm.ToGlbBytes();
         File.WriteAllBytes(path, bytes);
     }

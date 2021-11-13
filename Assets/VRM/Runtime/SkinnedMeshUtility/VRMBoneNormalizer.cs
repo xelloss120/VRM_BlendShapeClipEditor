@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using UniGLTF.MeshUtility;
 using UniHumanoid;
 using UnityEngine;
 
@@ -66,7 +67,7 @@ namespace VRM
             //
             // 正規化されたヒエラルキーを作る
             //
-            var (normalized, bMap) = MeshUtility.BoneNormalizer.Execute(go, (_src, dst, boneMap) =>
+            var (normalized, bMap) = BoneNormalizer.Execute(go, (_src, dst, boneMap) =>
             {
                 var src = _src.GetComponent<Animator>();
 
@@ -152,7 +153,7 @@ namespace VRM
                     dstColliderGroup.Colliders = src.Colliders.Select(y =>
                     {
                         var offset = dst.worldToLocalMatrix.MultiplyPoint(src.transform.localToWorldMatrix.MultiplyPoint(y.Offset));
-                        var ls = src.UniformedLossyScale;
+                        var ls = src.transform.UniformedLossyScale();
                         return new VRMSpringBoneColliderGroup.SphereCollider
                         {
                             Offset = offset,
@@ -212,6 +213,37 @@ namespace VRM
                 if (src != null)
                 {
                     src.CopyTo(root, map);
+                }
+            }
+            {
+                // look at
+                var src = go.GetComponent<VRMLookAtHead>();
+                if (src != null)
+                {
+                    var dst = root.AddComponent<VRMLookAtHead>();
+                }
+            }
+            {
+                // bone applier
+                var src = go.GetComponent<VRMLookAtBoneApplyer>();
+                if (src != null)
+                {
+                    var dst = root.AddComponent<VRMLookAtBoneApplyer>();
+                    dst.HorizontalInner.Assign(src.HorizontalInner);
+                    dst.HorizontalOuter.Assign(src.HorizontalOuter);
+                    dst.VerticalUp.Assign(src.VerticalUp);
+                    dst.VerticalDown.Assign(src.VerticalDown);
+                }
+            }
+            {
+                // blendshape applier
+                var src = go.GetComponent<VRMLookAtBlendShapeApplyer>();
+                if (src != null)
+                {
+                    var dst = root.AddComponent<VRMLookAtBlendShapeApplyer>();
+                    dst.Horizontal.Assign(src.Horizontal);
+                    dst.VerticalUp.Assign(src.VerticalUp);
+                    dst.VerticalDown.Assign(src.VerticalDown);
                 }
             }
 

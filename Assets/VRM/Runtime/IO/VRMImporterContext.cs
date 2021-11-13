@@ -3,82 +3,64 @@ using System.Linq;
 using System.Collections.Generic;
 using UniGLTF;
 using UnityEngine;
-using System.IO;
-using System.Collections;
 using UniJSON;
+using System.Threading.Tasks;
+using VRMShaders;
+using Object = UnityEngine.Object;
 
 namespace VRM
 {
     public class VRMImporterContext : ImporterContext
     {
-        public VRM.glTF_VRM_extensions VRM { get; private set; }
-
-        public VRMImporterContext()
+        VRMData _data;
+        public VRM.glTF_VRM_extensions VRM
         {
-        }
-
-        public override void Parse(string path, byte[] bytes)
-        {
-            var ext = Path.GetExtension(path).ToLower();
-            switch (ext)
+            get
             {
-                case ".vrm":
-                    ParseGlb(bytes);
-                    break;
-
-                default:
-                    base.Parse(path, bytes);
-                    break;
+                return _data.VrmExtension;
             }
         }
 
-        public override void ParseJson(string json, IStorage storage)
+        public VRMImporterContext(
+            VRMData data,
+            IReadOnlyDictionary<SubAssetKey, Object> externalObjectMap = null,
+            ITextureDeserializer textureDeserializer = null,
+            IMaterialDescriptorGenerator materialGenerator = null)
+            : base(data.Data, externalObjectMap, textureDeserializer, materialGenerator ?? new VRMMaterialDescriptorGenerator(data.VrmExtension))
         {
-            // parse GLTF part(core + unlit, textureTransform, targetNames)
-            base.ParseJson(json, storage);
-
-            // parse VRM part
-            if (glTF_VRM_extensions.TryDeserilize(GLTF.extensions, out glTF_VRM_extensions vrm))
-            {
-                VRM = vrm;
-                // override material importer
-                SetMaterialImporter(new VRMMaterialImporter(this, VRM.materialProperties));
-            }
-            else
-            {
-                throw new KeyNotFoundException("not vrm0");
-            }
+            _data = data;
+            TextureDescriptorGenerator = new VrmTextureDescriptorGenerator(Data, VRM);
         }
 
         #region OnLoad
-        protected override IEnumerator OnLoadModel()
+        protected override async Task OnLoadHierarchy(IAwaitCaller awaitCaller, Func<string, IDisposable> MeasureTime)
         {
             Root.name = "VRM";
 
             using (MeasureTime("VRM LoadMeta"))
             {
-                LoadMeta();
+                await LoadMetaAsync();
             }
-            yield return null;
+            await awaitCaller.NextFrame();
 
             using (MeasureTime("VRM LoadHumanoid"))
             {
                 LoadHumanoid();
             }
-            yield return null;
+            await awaitCaller.NextFrame();
 
             using (MeasureTime("VRM LoadBlendShapeMaster"))
             {
                 LoadBlendShapeMaster();
             }
-            yield return null;
+            await awaitCaller.NextFrame();
 
             using (MeasureTime("VRM LoadSecondary"))
             {
                 VRMSpringUtility.LoadSecondary(Root.transform, Nodes,
                 VRM.secondaryAnimation);
             }
-            yield return null;
+            await awaitCaller.NextFrame();
 
             using (MeasureTime("VRM LoadFirstPerson"))
             {
@@ -86,9 +68,9 @@ namespace VRM
             }
         }
 
-        void LoadMeta()
+        async Task LoadMetaAsync()
         {
-            var meta = ReadMeta();
+            var meta = await ReadMetaAsync();
             var _meta = Root.AddComponent<VRMMeta>();
             _meta.Meta = meta;
             Meta = meta;
@@ -193,7 +175,9 @@ namespace VRM
                         }
                     }
 
-                    var material = GetMaterials().FirstOrDefault(y => y.name == x.materialName);
+                    var material = MaterialFactory.Materials
+                        .Select(y => y.Asset)
+                        .FirstOrDefault(y => y.name == x.materialName);
                     var propertyName = x.propertyName;
                     if (x.propertyName.FastEndsWith("_ST_S")
                     || x.propertyName.FastEndsWith("_ST_T"))
@@ -277,7 +261,7 @@ namespace VRM
             }
             animator.avatar = HumanoidAvatar;
 
-            // default としてとりあえず設定する            
+            // default としてとりあえず設定する
             // https://docs.unity3d.com/ScriptReference/Renderer-probeAnchor.html
             var head = animator.GetBoneTransform(HumanBodyBones.Head);
             foreach (var smr in animator.GetComponentsInChildren<SkinnedMeshRenderer>())
@@ -292,8 +276,10 @@ namespace VRM
         public BlendShapeAvatar BlendShapeAvatar;
         public VRMMetaObject Meta;
 
-        public VRMMetaObject ReadMeta(bool createThumbnail = false)
+        public async Task<VRMMetaObject> ReadMetaAsync(IAwaitCaller awaitCaller = null, bool createThumbnail = false)
         {
+            awaitCaller = awaitCaller ?? new ImmediateCaller();
+
             var meta = ScriptableObject.CreateInstance<VRMMetaObject>();
             meta.name = "Meta";
             meta.ExporterVersion = VRM.exporterVersion;
@@ -304,24 +290,11 @@ namespace VRM
             meta.ContactInformation = gltfMeta.contactInformation;
             meta.Reference = gltfMeta.reference;
             meta.Title = gltfMeta.title;
-
-            var thumbnail = GetTexture(gltfMeta.texture);
-            if (thumbnail != null)
+            if (gltfMeta.texture >= 0)
             {
-                // ロード済み
-                meta.Thumbnail = thumbnail.Texture;
+                var (key, param) = GltfTextureImporter.CreateSRGB(Data, gltfMeta.texture, Vector2.zero, Vector2.one);
+                meta.Thumbnail = await TextureFactory.GetTextureAsync(param, awaitCaller) as Texture2D;
             }
-            else if (createThumbnail)
-            {
-                // 作成する(先行ロード用)
-                if (gltfMeta.texture >= 0 && gltfMeta.texture < GLTF.textures.Count)
-                {
-                    var t = new TextureItem(gltfMeta.texture, CreateTextureLoader(gltfMeta.texture));
-                    t.Process(GLTF, Storage);
-                    meta.Thumbnail = t.Texture;
-                }
-            }
-
             meta.AllowedUser = gltfMeta.allowedUser;
             meta.ViolentUssage = gltfMeta.violentUssage;
             meta.SexualUssage = gltfMeta.sexualUssage;
@@ -334,80 +307,60 @@ namespace VRM
             return meta;
         }
 
-        protected override IEnumerable<UnityEngine.Object> ObjectsForSubAsset()
+        public override void TransferOwnership(TakeResponsibilityForDestroyObjectFunc take)
         {
-            foreach (var x in base.ObjectsForSubAsset())
-            {
-                yield return x;
-            }
+            // VRM-0 は SubAssetKey を使っていないので default で済ます
 
-            yield return AvatarDescription;
-            yield return HumanoidAvatar;
+            // VRM 固有のリソース(ScriptableObject)
+            take(default, HumanoidAvatar);
+            HumanoidAvatar = null;
 
-            if (BlendShapeAvatar != null && BlendShapeAvatar.Clips != null)
+            take(default, Meta);
+            Meta = null;
+
+            take(default, AvatarDescription);
+            AvatarDescription = null;
+
+            foreach (var x in BlendShapeAvatar.Clips)
             {
-                foreach (var x in BlendShapeAvatar.Clips)
+                take(default, x);
                 {
-                    yield return x;
+                    // do nothing
                 }
             }
-            yield return BlendShapeAvatar;
 
-            yield return Meta;
+            take(default, BlendShapeAvatar);
+            BlendShapeAvatar = null;
+
+            // GLTF のリソース
+            base.TransferOwnership(take);
         }
 
-#if UNITY_EDITOR
-        public override bool AvoidOverwriteAndLoad(UnityPath assetPath, UnityEngine.Object o)
+        public override void Dispose()
         {
-            if (o is BlendShapeAvatar)
+            // VRM specific
+            if (HumanoidAvatar != null)
             {
-                var loaded = assetPath.LoadAsset<BlendShapeAvatar>();
-                var proxy = Root.GetComponent<VRMBlendShapeProxy>();
-                proxy.BlendShapeAvatar = loaded;
-
-                return true;
+                UnityObjectDestoyer.DestroyRuntimeOrEditor(HumanoidAvatar);
+            }
+            if (Meta != null)
+            {
+                UnityObjectDestoyer.DestroyRuntimeOrEditor(Meta);
+            }
+            if (AvatarDescription != null)
+            {
+                UnityObjectDestoyer.DestroyRuntimeOrEditor(AvatarDescription);
+            }
+            if (BlendShapeAvatar != null)
+            {
+                foreach (var clip in BlendShapeAvatar.Clips)
+                {
+                    UnityObjectDestoyer.DestroyRuntimeOrEditor(clip);
+                }
+                UnityObjectDestoyer.DestroyRuntimeOrEditor(BlendShapeAvatar);
             }
 
-            if (o is BlendShapeClip)
-            {
-                return true;
-            }
-
-            return base.AvoidOverwriteAndLoad(assetPath, o);
+            base.Dispose();
         }
-
-        protected override UnityPath GetAssetPath(UnityPath prefabPath, UnityEngine.Object o)
-        {
-            if (o is BlendShapeAvatar
-                || o is BlendShapeClip)
-            {
-                var dir = prefabPath.GetAssetFolder(".BlendShapes");
-                var assetPath = dir.Child(o.name.EscapeFilePath() + ".asset");
-                return assetPath;
-            }
-            else if (o is Avatar)
-            {
-                var dir = prefabPath.GetAssetFolder(".Avatar");
-                var assetPath = dir.Child(o.name.EscapeFilePath() + ".asset");
-                return assetPath;
-            }
-            else if (o is VRMMetaObject)
-            {
-                var dir = prefabPath.GetAssetFolder(".MetaObject");
-                var assetPath = dir.Child(o.name.EscapeFilePath() + ".asset");
-                return assetPath;
-            }
-            else if (o is UniHumanoid.AvatarDescription)
-            {
-                var dir = prefabPath.GetAssetFolder(".AvatarDescription");
-                var assetPath = dir.Child(o.name.EscapeFilePath() + ".asset");
-                return assetPath;
-            }
-            else
-            {
-                return base.GetAssetPath(prefabPath, o);
-            }
-        }
-#endif
     }
 }

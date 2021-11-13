@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UniGLTF;
 using VRM;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -39,7 +40,7 @@ namespace VRMLoader
             path = "file://" + path;
 #endif
 #elif UNITY_STANDALONE_WIN
-            var path = VRM.Samples.FileDialogForWindows.FileDialog("open VRM", ".vrm");
+            var path = VRM.SimpleViewer.FileDialogForWindows.FileDialog("open VRM", ".vrm");
             path = "file:///" + path;
 #else
             var path = Application.dataPath + "/default.vrm";
@@ -57,8 +58,9 @@ namespace VRMLoader
             yield return www;
 
             // GLB形式のperse
-            m_context = new VRMImporterContext();
-            m_context.ParseGlb(www.bytes);
+            var data = new GlbFileParser(path).Parse();
+            var vrm = new VRMData(data);
+            m_context = new VRMImporterContext(vrm);
 
             // meta情報を読み込む
             bool createThumbnail=true;
@@ -85,16 +87,12 @@ namespace VRMLoader
         private void ModelLoad()
         {
             var now = Time.time;
-            m_context.LoadAsync(_ =>
-                {
-                    m_context.ShowMeshes();
-                    var go = m_context.Root;
-                    // load完了
-                    var delta = Time.time - now;
-                    Debug.LogFormat("LoadVrmAsync {0:0.0} seconds", delta);
-                    OnLoaded(go);
-                },
-                Debug.LogError);
+
+            var loaded = default(RuntimeGltfInstance);
+            loaded = m_context.Load();
+            loaded.ShowMeshes();
+
+            OnLoaded(loaded.Root);
         }
 
         void OnLoaded(GameObject root)

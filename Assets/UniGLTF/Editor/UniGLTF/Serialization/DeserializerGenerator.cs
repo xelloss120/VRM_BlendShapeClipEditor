@@ -7,7 +7,7 @@ using UnityEngine;
 namespace UniGLTF
 {
     /// <summary>
-    /// Generate deserializer from ListTreeNode<JsonValue> to glTF using type reflection
+    /// Generate deserializer from JsonNode to glTF using type reflection
     /// </summary>
     public static class DeserializerGenerator
     {
@@ -39,8 +39,7 @@ public static class GltfDeserializer
             }
         }
 
-        [MenuItem(UniGLTFVersion.MENU + "/GLTF: Generate Deserializer")]
-        static void GenerateSerializer()
+        public static void GenerateSerializer()
         {
             var info = new ObjectSerialization(typeof(glTF), "gltf", "Deserialize_");
             Debug.Log(info);

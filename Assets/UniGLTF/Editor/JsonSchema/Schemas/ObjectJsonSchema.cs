@@ -25,6 +25,11 @@ namespace UniGLTF.JsonSchema.Schemas
                     throw new NotImplementedException();
                 }
 
+                if (string.IsNullOrEmpty(prop.Title))
+                {
+                    prop.Title = kv.Key.ToUpperCamel();
+                }
+
                 var key = kv.Key;
                 Properties.Add(key, prop);
             }
@@ -59,7 +64,7 @@ namespace UniGLTF.JsonSchema.Schemas
             writer.Used.Add(callName);
 
             writer.Write(@"
-public static $0 $2(ListTreeNode<JsonValue> parsed)
+public static $0 $2(JsonNode parsed)
 {
     var value = new $0();
 
@@ -71,6 +76,8 @@ public static $0 $2(ListTreeNode<JsonValue> parsed)
 .Replace("$2", callName)
 );
 
+            var prefix = string.IsNullOrEmpty(ClassName) ? "Deserialize_" : $"{ClassName}_Deserialize_";
+
             foreach (var kv in Properties)
             {
                 writer.Write(@"
@@ -80,7 +87,7 @@ public static $0 $2(ListTreeNode<JsonValue> parsed)
         }
 "
 .Replace("$0", kv.Key)
-.Replace("$1", kv.Value.GenerateDeserializerCall($"Deserialize_{kv.Key.ToUpperCamel()}", "kv.Value"))
+.Replace("$1", kv.Value.GenerateDeserializerCall($"{prefix}{kv.Key.ToUpperCamel()}", "kv.Value"))
 .Replace("$2", kv.Key.ToUpperCamel())
 );
             }
@@ -95,7 +102,7 @@ public static $0 $2(ListTreeNode<JsonValue> parsed)
             {
                 if (!kv.Value.IsInline)
                 {
-                    kv.Value.GenerateDeserializer(writer, $"Deserialize_{kv.Key.ToUpperCamel()}");
+                    kv.Value.GenerateDeserializer(writer, $"{prefix}{kv.Key.ToUpperCamel()}");
                 }
             }
         }
@@ -131,6 +138,9 @@ public static void {callName}(JsonFormatter f, {ValueType} value)
 "
 );
 
+
+            var prefix = string.IsNullOrEmpty(ClassName) ? "Serialize_" : $"{ClassName}_Serialize_";
+
             foreach (var kv in Properties)
             {
                 var valueName = $"value.{kv.Key.ToUpperCamel()}";
@@ -138,7 +148,7 @@ public static void {callName}(JsonFormatter f, {ValueType} value)
                 writer.Write($@"
     if({kv.Value.CreateSerializationCondition(valueName)}{condition}){{
         f.Key(""{kv.Key}"");                
-        {kv.Value.GenerateSerializerCall($"Serialize_{kv.Key.ToUpperCamel()}", valueName)};
+        {kv.Value.GenerateSerializerCall($"{prefix}{kv.Key.ToUpperCamel()}", valueName)};
     }}
 ");
             }
@@ -152,7 +162,7 @@ public static void {callName}(JsonFormatter f, {ValueType} value)
             {
                 if (!kv.Value.IsInline)
                 {
-                    kv.Value.GenerateSerializer(writer, $"Serialize_{kv.Key.ToUpperCamel()}");
+                    kv.Value.GenerateSerializer(writer, $"{prefix}{kv.Key.ToUpperCamel()}");
                 }
             }
         }

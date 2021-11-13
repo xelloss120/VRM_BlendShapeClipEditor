@@ -18,7 +18,7 @@ namespace UniGLTF
 
         public static readonly Utf8String ExtraNameUtf8 = Utf8String.From(ExtraName);
 
-        static List<string> Deserialize(ListTreeNode<JsonValue> json)
+        static List<string> Deserialize(JsonNode json)
         {
             var targetNames = new List<string>();
             if (json.Value.ValueType == ValueNodeType.Array)
@@ -55,6 +55,21 @@ namespace UniGLTF
                         targetNames = Deserialize(kv.Value);
                         return true;
                     }
+                }
+            }
+
+            if (mesh.primitives.Count > 0)
+            {
+                var prim = mesh.primitives[0];
+                if (prim.targets.Count > 0)
+                {
+                    // 名無しには連番を付ける
+                    targetNames = new List<string>();
+                    for (int i = 0; i < prim.targets.Count; ++i)
+                    {
+                        targetNames.Add($"{i}");
+                    }
+                    return true;
                 }
             }
 

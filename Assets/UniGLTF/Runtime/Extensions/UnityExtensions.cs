@@ -45,9 +45,19 @@ namespace UniGLTF
             return new Vector4(v.x, v.y, -v.z, v.w);
         }
 
+        public static Vector4 ReverseX(this Vector4 v)
+        {
+            return new Vector4(-v.x, v.y, v.z, v.w);
+        }
+
         public static Vector3 ReverseZ(this Vector3 v)
         {
             return new Vector3(v.x, v.y, -v.z);
+        }
+
+        public static Vector3 ReverseX(this Vector3 v)
+        {
+            return new Vector3(-v.x, v.y, v.z);
         }
 
         [Obsolete]
@@ -67,6 +77,14 @@ namespace UniGLTF
             Vector3 axis;
             q.ToAngleAxis(out angle, out axis);
             return Quaternion.AngleAxis(-angle, ReverseZ(axis));
+        }
+
+        public static Quaternion ReverseX(this Quaternion q)
+        {
+            float angle;
+            Vector3 axis;
+            q.ToAngleAxis(out angle, out axis);
+            return Quaternion.AngleAxis(-angle, ReverseX(axis));
         }
 
         public static Matrix4x4 Matrix4x4FromColumns(Vector4 c0, Vector4 c1, Vector4 c2, Vector4 c3)
@@ -97,6 +115,12 @@ namespace UniGLTF
         public static Matrix4x4 ReverseZ(this Matrix4x4 m)
         {
             m.SetTRS(m.ExtractPosition().ReverseZ(), m.ExtractRotation().ReverseZ(), m.ExtractScale());
+            return m;
+        }
+
+        public static Matrix4x4 ReverseX(this Matrix4x4 m)
+        {
+            m.SetTRS(m.ExtractPosition().ReverseX(), m.ExtractRotation().ReverseX(), m.ExtractScale());
             return m;
         }
 
@@ -156,6 +180,55 @@ namespace UniGLTF
             return scale;
         }
 
+        public static bool Nearly(in Matrix4x4 lhs, in Matrix4x4 rhs, float epsilon = 1e-3f)
+        {
+            if (Mathf.Abs(lhs.m00 - rhs.m00) > epsilon) return false;
+            if (Mathf.Abs(lhs.m01 - rhs.m01) > epsilon) return false;
+            if (Mathf.Abs(lhs.m02 - rhs.m02) > epsilon) return false;
+            if (Mathf.Abs(lhs.m03 - rhs.m03) > epsilon) return false;
+            if (Mathf.Abs(lhs.m10 - rhs.m10) > epsilon) return false;
+            if (Mathf.Abs(lhs.m11 - rhs.m11) > epsilon) return false;
+            if (Mathf.Abs(lhs.m12 - rhs.m12) > epsilon) return false;
+            if (Mathf.Abs(lhs.m13 - rhs.m13) > epsilon) return false;
+            if (Mathf.Abs(lhs.m20 - rhs.m20) > epsilon) return false;
+            if (Mathf.Abs(lhs.m21 - rhs.m21) > epsilon) return false;
+            if (Mathf.Abs(lhs.m22 - rhs.m22) > epsilon) return false;
+            if (Mathf.Abs(lhs.m23 - rhs.m23) > epsilon) return false;
+            if (Mathf.Abs(lhs.m30 - rhs.m30) > epsilon) return false;
+            if (Mathf.Abs(lhs.m31 - rhs.m31) > epsilon) return false;
+            if (Mathf.Abs(lhs.m32 - rhs.m32) > epsilon) return false;
+            if (Mathf.Abs(lhs.m33 - rhs.m33) > epsilon) return false;
+            return true;
+        }
+
+        public static (Vector3 T, Quaternion R, Vector3 S) Extract(this Matrix4x4 m)
+        {
+            if (m.determinant < 0)
+            {
+                // ミラーリングを試行する
+
+                // -X
+                {
+                    var mm = m * Matrix4x4.Scale(new Vector3(-1, 1, 1));
+                    var ss = mm.ExtractScale();
+                    mm = mm * Matrix4x4.Scale(new Vector3(1 / ss.x, 1 / ss.y, 1 / ss.z));
+                    var tt = mm.ExtractPosition();
+                    var rr = mm.ExtractRotation();
+                    ss.x = -ss.x;
+                    var mmm = Matrix4x4.TRS(tt, rr, ss);
+                    if (Nearly(m, mmm))
+                    {
+                        return (tt, rr, ss);
+                    }
+                }
+            }
+
+            var s = m.ExtractScale();
+            var t = m.ExtractPosition();
+            var r = m.ExtractRotation();
+            return (t, r, s);
+        }
+
         public static string RelativePathFrom(this Transform self, Transform root)
         {
             var path = new List<String>();
@@ -189,7 +262,7 @@ namespace UniGLTF
         {
             var current = self;
 
-            var split = path.Split('/');
+            var split = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var childName in split)
             {
@@ -257,19 +330,14 @@ namespace UniGLTF
             return new float[] { v.x, v.y, v.z, v.w };
         }
 
-        public static float[] ToArray(this Color c)
-        {
-            return new float[] { c.r, c.g, c.b, c.a };
-        }
-
-        public static void ReverseZRecursive(this Transform root)
+        public static void ReverseRecursive(this Transform root, IAxisInverter axisInverter)
         {
             var globalMap = root.Traverse().ToDictionary(x => x, x => PosRot.FromGlobalTransform(x));
 
             foreach (var x in root.Traverse())
             {
-                x.position = globalMap[x].Position.ReverseZ();
-                x.rotation = globalMap[x].Rotation.ReverseZ();
+                x.position = axisInverter.InvertVector3(globalMap[x].Position);
+                x.rotation = axisInverter.InvertQuaternion(globalMap[x].Rotation);
             }
         }
 
@@ -314,6 +382,16 @@ namespace UniGLTF
                 return c;
             }
             return go.AddComponent<T>();
+        }
+
+        public static bool EnableForExport(this Component mono)
+        {
+            if (mono.transform.Ancestors().Any(x => !x.gameObject.activeSelf))
+            {
+                // 自分か祖先に !activeSelf がいる
+                return false;
+            }
+            return true;
         }
     }
 }

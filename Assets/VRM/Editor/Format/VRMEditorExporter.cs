@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using UniGLTF;
-using UnityEditor;
+using UniGLTF.MeshUtility;
 using UnityEngine;
+using VRMShaders;
 
 namespace VRM
 {
@@ -16,12 +16,12 @@ namespace VRM
         /// </summary>
         /// <param name="path">出力先</param>
         /// <param name="settings">エクスポート設定</param>
-        public static void Export(string path, GameObject exportRoot, VRMMetaObject meta, VRMExportSettings settings, IReadOnlyList<MeshExportInfo> info)
+        public static byte[] Export(GameObject exportRoot, VRMMetaObject meta, VRMExportSettings settings)
         {
             List<GameObject> destroy = new List<GameObject>();
             try
             {
-                Export(path, exportRoot, meta, settings, info, destroy);
+                return Export(exportRoot, meta, settings, destroy);
             }
             finally
             {
@@ -77,7 +77,7 @@ namespace VRM
                 .Distinct()
                 .ToArray();
 
-            var copyMesh = MeshUtility.MeshExtensions.Copy(mesh, copyBlendShape: false);
+            var copyMesh = mesh.Copy(copyBlendShape: false);
             // 使われている BlendShape だけをコピーする
             foreach (var i in usedBlendshapeIndexArray)
             {
@@ -131,13 +131,13 @@ namespace VRM
         }
 
         /// <summary>
-        /// 
+        ///
         /// </summary>
         /// <param name="path"></param>
         /// <param name="settings"></param>
         /// <param name="destroy">作業が終わったらDestoryするべき一時オブジェクト</param>
-        static void Export(string path, GameObject exportRoot, VRMMetaObject meta,
-                    VRMExportSettings settings, IReadOnlyList<UniGLTF.MeshExportInfo> info,
+        static byte[] Export(GameObject exportRoot, VRMMetaObject meta,
+                    VRMExportSettings settings,
                     List<GameObject> destroy)
         {
             var target = exportRoot;
@@ -200,6 +200,8 @@ namespace VRM
                 destroy.Add(target);
             }
 
+            var fp = target.GetComponent<VRMFirstPerson>();
+
             // 元のBlendShapeClipに変更を加えないように複製
             var proxy = target.GetComponent<VRMBlendShapeProxy>();
             if (proxy != null)
@@ -220,21 +222,15 @@ namespace VRM
 
             // 出力
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var gltf = new UniGLTF.glTF();
-            using (var exporter = new VRMExporter(gltf))
+            var data = new UniGLTF.ExportingGltfData();
+            using (var exporter = new VRMExporter(data, settings.MeshExportSettings))
             {
                 exporter.Prepare(target);
-                exporter.Export(settings.MeshExportSettings);
+                exporter.Export(new EditorTextureSerializer());
             }
-            var bytes = gltf.ToGlbBytes();
-            File.WriteAllBytes(path, bytes);
+            var bytes = data.ToGlbBytes();
             Debug.LogFormat("Export elapsed {0}", sw.Elapsed);
-
-            if (path.StartsWithUnityAssetPath())
-            {
-                // 出力ファイルのインポートを発動
-                AssetDatabase.ImportAsset(path.ToUnityRelativePath());
-            }
+            return bytes;
         }
     }
 }

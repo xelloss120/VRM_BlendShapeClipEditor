@@ -1,42 +1,47 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using UniGLTF;
 using UniJSON;
 using UnityEngine;
-
+using VRMShaders;
+using ColorSpace = VRMShaders.ColorSpace;
 
 namespace VRM
 {
     public class VRMExporter : gltfExporter
     {
+        public const Axes Vrm0xSpecificationInverseAxis = Axes.Z;
+
+        public static ExportingGltfData Export(GltfExportSettings configuration, GameObject go, ITextureSerializer textureSerializer)
+        {
+            var data = new ExportingGltfData();
+            using (var exporter = new VRMExporter(data, configuration))
+            {
+                exporter.Prepare(go);
+                exporter.Export(textureSerializer);
+            }
+            return data;
+        }
+
+        public readonly VRM.glTF_VRM_extensions VRM = new glTF_VRM_extensions();
+
+        public VRMExporter(ExportingGltfData data, GltfExportSettings exportSettings) : base(data, exportSettings)
+        {
+            if (exportSettings == null || exportSettings.InverseAxis != Vrm0xSpecificationInverseAxis)
+            {
+                throw new Exception($"VRM specification requires InverseAxis settings as {Vrm0xSpecificationInverseAxis}");
+            }
+
+            _gltf.extensionsUsed.Add(glTF_VRM_extensions.ExtensionName);
+        }
+
         protected override IMaterialExporter CreateMaterialExporter()
         {
             return new VRMMaterialExporter();
         }
 
-        public static glTF Export(MeshExportSettings configuration, GameObject go)
+        public override void ExportExtensions(ITextureSerializer textureSerializer)
         {
-            var gltf = new glTF();
-            using (var exporter = new VRMExporter(gltf))
-            {
-                exporter.Prepare(go);
-                exporter.Export(configuration);
-            }
-            return gltf;
-        }
-
-        public readonly VRM.glTF_VRM_extensions VRM = new glTF_VRM_extensions();
-
-        public VRMExporter(glTF gltf) : base(gltf)
-        {
-            gltf.extensionsUsed.Add(glTF_VRM_extensions.ExtensionName);
-        }
-
-        public override void Export(MeshExportSettings configuration)
-        {
-            base.Export(configuration);
-
             // avatar
             var animator = Copy.GetComponent<Animator>();
             if (animator != null)
@@ -113,7 +118,7 @@ namespace VRM
                     VRM.meta.title = meta.Title;
                     if (meta.Thumbnail != null)
                     {
-                        VRM.meta.texture = TextureExporter.ExportTexture(glTF, glTF.buffers.Count - 1, meta.Thumbnail, glTFTextureTypes.Unknown);
+                        VRM.meta.texture = GltfTextureExporter.PushGltfTexture(_data, meta.Thumbnail, ColorSpace.sRGB, textureSerializer);
                     }
 
                     VRM.meta.licenseType = meta.LicenseType;
@@ -138,7 +143,7 @@ namespace VRM
                     VRM.meta.title = meta.Title;
                     if (meta.Thumbnail != null)
                     {
-                        VRM.meta.texture = TextureExporter.ExportTexture(glTF, glTF.buffers.Count - 1, meta.Thumbnail, glTFTextureTypes.Unknown);
+                        VRM.meta.texture = TextureExporter.RegisterExportingAsSRgb(meta.Thumbnail, needsAlpha: true);
                     }
 
                     // ussage permission
@@ -201,14 +206,14 @@ namespace VRM
             // materials
             foreach (var m in Materials)
             {
-                VRM.materialProperties.Add(VRMMaterialExporter.CreateFromMaterial(m, TextureManager.Textures));
+                VRM.materialProperties.Add(VRMMaterialExporter.CreateFromMaterial(m, TextureExporter));
             }
 
             // Serialize VRM
             var f = new JsonFormatter();
             VRMSerializer.Serialize(f, VRM);
             var bytes = f.GetStoreBytes();
-            glTFExtensionExport.GetOrCreate(ref glTF.extensions).Add("VRM", bytes);
+            glTFExtensionExport.GetOrCreate(ref _gltf.extensions).Add("VRM", bytes);
         }
     }
 }

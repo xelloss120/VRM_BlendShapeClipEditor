@@ -1,5 +1,9 @@
+using System;
+using System.IO;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
+using VRMShaders;
 
 namespace UniGLTF
 {
@@ -14,115 +18,95 @@ namespace UniGLTF
                 wrapMode = TextureWrapMode.Clamp,
                 filterMode = FilterMode.Trilinear,
             };
-            var textureManager = new TextureExportManager(new Texture[] {tex0});
+            var textureExporter = new TextureExporter(new EditorTextureSerializer());
 
             var material = new Material(Shader.Find("Standard"));
             material.mainTexture = tex0;
 
             var materialExporter = new MaterialExporter();
-            materialExporter.ExportMaterial(material, textureManager);
+            materialExporter.ExportMaterial(material, textureExporter, new GltfExportSettings());
 
-            var convTex0 = textureManager.GetExportTexture(0);
+            var exported = textureExporter.Export();
+
+            var (convTex0, colorSpace) = exported[0];
             var sampler = TextureSamplerUtil.Export(convTex0);
 
             Assert.AreEqual(glWrap.CLAMP_TO_EDGE, sampler.wrapS);
             Assert.AreEqual(glWrap.CLAMP_TO_EDGE, sampler.wrapT);
+
+            Assert.AreEqual(FilterMode.Trilinear, convTex0.filterMode);
+            Assert.IsTrue(convTex0.mipmapCount > 1);
+            // Tirilinear => LINEAR_MIPMAP_LINEAR
             Assert.AreEqual(glFilter.LINEAR_MIPMAP_LINEAR, sampler.minFilter);
-            Assert.AreEqual(glFilter.LINEAR_MIPMAP_LINEAR, sampler.magFilter);
+            Assert.AreEqual(glFilter.LINEAR, sampler.magFilter);
         }
-    }
 
-    public class MetallicRoughnessConverterTests
-    {
-        [Test]
-        public void ExportingColorTest()
+        static FileInfo Find(DirectoryInfo current, string target)
         {
+            foreach (var child in current.EnumerateFiles())
             {
-                var smoothness = 1.0f;
-                var conv = new MetallicRoughnessConverter(smoothness);
-                Assert.That(
-                    conv.Export(new Color32(255, 255, 255, 255)),
-                    // r <- 0   : (Unused)
-                    // g <- 0   : ((1 - src.a(as float) * smoothness) ^ 2)(as uint8)
-                    // b <- 255 : Same metallic (src.r)
-                    // a <- 255 : (Unused)
-                    Is.EqualTo(new Color32(0, 0, 255, 255)));
+                if (child.Name == target)
+                {
+                    return child;
+                }
             }
 
+            foreach (var child in current.EnumerateDirectories())
             {
-                var smoothness = 0.5f;
-                var conv = new MetallicRoughnessConverter(smoothness);
-                Assert.That(
-                    conv.Export(new Color32(255, 255, 255, 255)),
-                    // r <- 0   : (Unused)
-                    // g <- 63  : ((1 - src.a(as float) * smoothness) ^ 2)(as uint8)
-                    // b <- 255 : Same metallic (src.r)
-                    // a <- 255 : (Unused)
-                    Is.EqualTo(new Color32(0, 63, 255, 255)));
+                var found = Find(child, target);
+                if (found != null)
+                {
+                    return found;
+                }
             }
 
+            return null;
+        }
+
+        static FileInfo GetGltfTestModelPath(string name)
+        {
+            var env = System.Environment.GetEnvironmentVariable("GLTF_SAMPLE_MODELS");
+            if (string.IsNullOrEmpty(env))
             {
-                var smoothness = 0.0f;
-                var conv = new MetallicRoughnessConverter(smoothness);
-                Assert.That(
-                    conv.Export(new Color32(255, 255, 255, 255)),
-                    // r <- 0   : (Unused)
-                    // g <- 255 : ((1 - src.a(as float) * smoothness) ^ 2)(as uint8)
-                    // b <- 255 : Same metallic (src.r)
-                    // a <- 255 : (Unused)
-                    Is.EqualTo(new Color32(0, 255, 255, 255)));
+                return null;
             }
+            var root = new DirectoryInfo($"{env}/2.0");
+            if (!root.Exists)
+            {
+                return null;
+            }
+
+            return Find(root, name);
         }
 
         [Test]
-        public void ImportingColorTest()
+        public void TextureExtractTest()
         {
+            var path = GetGltfTestModelPath("BoomBox.glb");
+            if (path == null)
             {
-                var roughnessFactor = 1.0f;
-                var conv = new MetallicRoughnessConverter(roughnessFactor);
-                Assert.That(
-                    conv.Import(new Color32(255, 255, 255, 255)),
-                    // r <- 255 : Same metallic (src.r)
-                    // g <- 0   : (Unused)
-                    // b <- 0   : (Unused)
-                    // a <- 0   : ((1 - sqrt(src.g(as float) * roughnessFactor)))(as uint8)
-                    Is.EqualTo(new Color32(255, 0, 0, 0)));
+                return;
             }
 
-            {
-                var roughnessFactor = 1.0f;
-                var conv = new MetallicRoughnessConverter(roughnessFactor);
-                Assert.That(
-                    conv.Import(new Color32(255, 63, 255, 255)),
-                    // r <- 255 : Same metallic (src.r)
-                    // g <- 0   : (Unused)
-                    // b <- 0   : (Unused)
-                    // a <- 128 : ((1 - sqrt(src.g(as float) * roughnessFactor)))(as uint8)
-                    Is.EqualTo(new Color32(255, 0, 0, 128))); // smoothness 0.5 * src.a 1.0
-            }
+            // parse
+            var data = new GlbFileParser(path.FullName).Parse();
 
+            // load
+            using (var context = new ImporterContext(data))
             {
-                var roughnessFactor = 0.5f;
-                var conv = new MetallicRoughnessConverter(roughnessFactor);
-                Assert.That(
-                    conv.Import(new Color32(255, 255, 255, 255)),
-                    // r <- 255 : Same metallic (src.r)
-                    // g <- 0   : (Unused)
-                    // b <- 0   : (Unused)
-                    // a <- 74 : ((1 - sqrt(src.g(as float) * roughnessFactor)))(as uint8)
-                    Is.EqualTo(new Color32(255, 0, 0, 74)));
-            }
+                var instance = context.Load();
+                var textureMap = instance.RuntimeResources
+                    .Select(kv => (kv.Item1, kv.Item2 as Texture))
+                    .Where(kv => kv.Item2 != null)
+                    .ToDictionary(kv => kv.Item1, kv => kv.Item2)
+                    ;
 
-            {
-                var roughnessFactor = 0.0f;
-                var conv = new MetallicRoughnessConverter(roughnessFactor);
-                Assert.That(
-                    conv.Import(new Color32(255, 255, 255, 255)),
-                    // r <- 255 : Same metallic (src.r)
-                    // g <- 0   : (Unused)
-                    // b <- 0   : (Unused)
-                    // a <- 255 : ((1 - sqrt(src.g(as float) * roughnessFactor)))(as uint8)
-                    Is.EqualTo(new Color32(255, 0, 0, 255)));
+                // extractor
+                var extractor = new TextureExtractor(data, UnityPath.FromUnityPath(""), textureMap);
+                var m = context.TextureDescriptorGenerator.Get().GetEnumerable()
+                    .FirstOrDefault(x => x.SubAssetKey.Name == "texture_1.standard");
+
+                Assert.Catch<NotImplementedException>(() => extractor.Extract(m.SubAssetKey, m));
             }
         }
     }

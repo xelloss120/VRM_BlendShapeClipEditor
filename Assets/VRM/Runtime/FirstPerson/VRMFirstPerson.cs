@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UniGLTF;
+using UniGLTF.MeshUtility;
 using UnityEngine;
 
 
@@ -57,7 +58,8 @@ namespace VRM
             dst.FirstPersonOffset = FirstPersonOffset;
             dst.Renderers = Renderers.Select(x =>
             {
-                var renderer = map[x.Renderer.transform].GetComponent<Renderer>();
+                var mapped = map[x.Renderer.transform];
+                var renderer = mapped.GetComponent<Renderer>();
                 return new VRMFirstPerson.RendererFirstPersonFlags
                 {
                     Renderer = renderer,
@@ -128,13 +130,13 @@ namespace VRM
         /// <summary>
         /// ヘッドレスモデルを作成した場合に返す
         /// </summary>
-        Mesh CreateHeadlessModel(Renderer _renderer, Transform EraseRoot, SetVisiblityFunc setVisiblity)
+        Mesh CreateHeadlessModel(Renderer _renderer, Transform EraseRoot, SetVisibilityFunc setVisibility)
         {
             {
                 var renderer = _renderer as SkinnedMeshRenderer;
                 if (renderer != null)
                 {
-                    return CreateHeadlessModelForSkinnedMeshRenderer(renderer, EraseRoot, setVisiblity);
+                    return CreateHeadlessModelForSkinnedMeshRenderer(renderer, EraseRoot, setVisibility);
                 }
             }
 
@@ -143,7 +145,7 @@ namespace VRM
                 var renderer = _renderer as MeshRenderer;
                 if (renderer != null)
                 {
-                    CreateHeadlessModelForMeshRenderer(renderer, EraseRoot, setVisiblity);
+                    CreateHeadlessModelForMeshRenderer(renderer, EraseRoot, setVisibility);
                     return null;
                 }
             }
@@ -164,12 +166,12 @@ namespace VRM
             }
         }
 
-        private static void CreateHeadlessModelForMeshRenderer(MeshRenderer renderer, Transform eraseRoot, SetVisiblityFunc setVisiblity)
+        private static void CreateHeadlessModelForMeshRenderer(MeshRenderer renderer, Transform eraseRoot, SetVisibilityFunc setVisibility)
         {
             if (renderer.transform.Ancestors().Any(x => x == eraseRoot))
             {
                 // 祖先に削除ボーンが居る
-                setVisiblity(renderer, false, true);
+                setVisibility(renderer, false, true);
             }
             else
             {
@@ -186,7 +188,7 @@ namespace VRM
         /// * 全部削除対象の場合
         ///
         /// </summary>
-        private static Mesh CreateHeadlessModelForSkinnedMeshRenderer(SkinnedMeshRenderer renderer, Transform eraseRoot, SetVisiblityFunc setVisiblity)
+        private static Mesh CreateHeadlessModelForSkinnedMeshRenderer(SkinnedMeshRenderer renderer, Transform eraseRoot, SetVisibilityFunc setVisibility)
         {
             var bones = renderer.bones;
 
@@ -211,10 +213,10 @@ namespace VRM
             }
 
             // 元のメッシュを三人称に変更(自分からは見えない)
-            setVisiblity(renderer, false, true);
+            setVisibility(renderer, false, true);
 
             // 削除対象のボーンに対するウェイトを保持する三角形を除外して、一人称用のモデルを複製する
-            var headlessMesh = MeshUtility.BoneMeshEraser.CreateErasedMesh(renderer.sharedMesh, eraseBones);
+            var headlessMesh = BoneMeshEraser.CreateErasedMesh(renderer.sharedMesh, eraseBones);
             if (headlessMesh.triangles.Length == 0)
             {
                 // 一人称用のmeshには描画すべき部分が無い(全部削除された)
@@ -248,6 +250,9 @@ namespace VRM
         /// <param name="renderer">Target renderer. Player avatar or other</param>
         /// <param name="firstPerson">visibility in HMD camera</param>
         /// <param name="thirdPerson">other camera visibility</param>
+        public delegate void SetVisibilityFunc(Renderer renderer, bool firstPerson, bool thirdPerson);
+
+        [Obsolete("Use SetVisibilityFunc")]
         public delegate void SetVisiblityFunc(Renderer renderer, bool firstPerson, bool thirdPerson);
 
         /// <summary>
@@ -257,7 +262,7 @@ namespace VRM
         /// <param name="renderer"></param>
         /// <param name="firstPerson"></param>
         /// <param name="thirdPerson"></param>
-        public static void SetVisiblity(Renderer renderer, bool firstPerson, bool thirdPerson)
+        public static void SetVisibility(Renderer renderer, bool firstPerson, bool thirdPerson)
         {
             SetupLayers();
 
@@ -283,17 +288,21 @@ namespace VRM
             }
         }
 
+        [Obsolete("Use SetVisibility")]
+        public static void SetVisiblity(Renderer renderer, bool firstPerson, bool thirdPerson) =>
+            SetVisibility(renderer, firstPerson, thirdPerson);
+
         public void Setup()
         {
             // same as v0.63.2
-            Setup(true, SetVisiblity);
+            Setup(true, SetVisibility);
         }
 
         /// <summary>
         /// from v0.64.0
         /// </summary>
         /// <param name="isSelf"></param>
-        public void Setup(bool isSelf, SetVisiblityFunc setVisiblity)
+        public void Setup(bool isSelf, SetVisibilityFunc setVisibility)
         {
             if (m_done) return;
             m_done = true;
@@ -307,7 +316,7 @@ namespace VRM
                     {
                         case FirstPersonFlag.Auto:
                             {
-                                var headlessMesh = CreateHeadlessModel(x.Renderer, FirstPersonBone, setVisiblity);
+                                var headlessMesh = CreateHeadlessModel(x.Renderer, FirstPersonBone, setVisibility);
                                 if (headlessMesh != null)
                                 {
                                     m_headlessMeshes.Add(headlessMesh);
@@ -316,15 +325,15 @@ namespace VRM
                             break;
 
                         case FirstPersonFlag.FirstPersonOnly:
-                            setVisiblity(x.Renderer, true, false);
+                            setVisibility(x.Renderer, true, false);
                             break;
 
                         case FirstPersonFlag.ThirdPersonOnly:
-                            setVisiblity(x.Renderer, false, true);
+                            setVisibility(x.Renderer, false, true);
                             break;
 
                         case FirstPersonFlag.Both:
-                            setVisiblity(x.Renderer, true, true);
+                            setVisibility(x.Renderer, true, true);
                             break;
                     }
                 }
@@ -337,14 +346,14 @@ namespace VRM
                     switch (x.FirstPersonFlag)
                     {
                         case FirstPersonFlag.FirstPersonOnly:
-                            setVisiblity(x.Renderer, false, false);
+                            setVisibility(x.Renderer, false, false);
                             break;
 
                         case FirstPersonFlag.Auto:
                         // => Same as Both
                         case FirstPersonFlag.Both:
                         case FirstPersonFlag.ThirdPersonOnly:
-                            setVisiblity(x.Renderer, true, true);
+                            setVisibility(x.Renderer, true, true);
                             break;
                     }
                 }

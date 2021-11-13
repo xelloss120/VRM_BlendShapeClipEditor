@@ -5,6 +5,7 @@ using System.Linq;
 using UniGLTF;
 using UnityEditor;
 using UnityEngine;
+using VRMShaders;
 
 
 namespace VRM
@@ -25,44 +26,54 @@ namespace VRM
                 var ext = Path.GetExtension(path).ToLower();
                 if (ext == ".vrm")
                 {
-                    ImportVrm(UnityPath.FromUnityPath(path));
+                    try
+                    {
+                        ImportVrm(UnityPath.FromUnityPath(path));
+                    }
+                    catch (NotVrm0Exception)
+                    {
+                        // is not vrm0
+                    }
                 }
             }
         }
 
-        static void ImportVrm(UnityPath path)
+        static void ImportVrm(UnityPath vrmPath)
         {
-            if (!path.IsUnderAssetsFolder)
+            if (!vrmPath.IsUnderAssetsFolder)
             {
                 throw new Exception();
             }
-            var context = new VRMImporterContext();
 
-            try
+            var data = new GlbFileParser(vrmPath.FullPath).Parse();
+            var vrm = new VRMData(data);
+
+            var prefabPath = vrmPath.Parent.Child(vrmPath.FileNameWithoutExtension + ".prefab");
+
+            Action<IEnumerable<UnityPath>> onCompleted = texturePaths =>
             {
-                context.ParseGlb(File.ReadAllBytes(path.FullPath));
-            }
-            catch (KeyNotFoundException)
-            {
-                // invalid VRM-0.X.
-                // maybe VRM-1.0.do nothing
-                return;
-            }
+                var map = texturePaths
+                    .Select(x => x.LoadAsset<Texture>())
+                    .ToDictionary(x => new SubAssetKey(x), x => x as UnityEngine.Object);
 
-            var prefabPath = path.Parent.Child(path.FileNameWithoutExtension + ".prefab");
-
-            // save texture assets !
-            context.ExtractImages(prefabPath);
-
-            EditorApplication.delayCall += () =>
-            {
-                //
-                // after textures imported
-                //
-                context.Load();
-                context.SaveAsAsset(prefabPath);
-                context.EditorDestroyRoot();
+                using (var context = new VRMImporterContext(vrm, externalObjectMap: map))
+                {
+                    var editor = new VRMEditorImporterContext(context, prefabPath);
+                    foreach (var textureInfo in context.TextureDescriptorGenerator.Get().GetEnumerable())
+                    {
+                        VRMShaders.TextureImporterConfigurator.Configure(textureInfo, context.TextureFactory.ExternalTextures);
+                    }
+                    var loaded = context.Load();
+                    editor.SaveAsAsset(loaded);
+                }
             };
+
+            // extract texture images
+            using (var context = new VRMImporterContext(vrm))
+            {
+                var editor = new VRMEditorImporterContext(context, prefabPath);
+                editor.ConvertAndExtractImages(onCompleted);
+            }
         }
     }
 #endif

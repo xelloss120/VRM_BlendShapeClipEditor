@@ -86,7 +86,7 @@ namespace UniGLTF.JsonSchema
             }
         }
 
-        JsonSchemaSource Parse(ListTreeNode<JsonValue> json, string jsonPath)
+        JsonSchemaSource Parse(JsonNode json, string jsonPath)
         {
             var source = new JsonSchemaSource
             {
@@ -187,8 +187,13 @@ namespace UniGLTF.JsonSchema
                         // source.properties = new Dictionary<string, JsonSchemaSource>();
                         foreach (var prop in kv.Value.ObjectItems())
                         {
-                            var propJsonPath = $"{jsonPath}.{prop.Key.GetString()}";
+                            var key = prop.Key.GetString();
+                            var propJsonPath = $"{jsonPath}.{key}";
                             var propSchema = Parse(prop.Value, propJsonPath);
+                            if (string.IsNullOrEmpty(propSchema.title))
+                            {
+                                propSchema.title = key.ToUpperCamel();
+                            }
                             if (propSchema is null)
                             {
                                 if (source.baseSchema is null)
@@ -294,13 +299,13 @@ namespace UniGLTF.JsonSchema
             return source;
         }
 
-        void ParseStringEnum(ref JsonSchemaSource source, ListTreeNode<JsonValue> json)
+        void ParseStringEnum(ref JsonSchemaSource source, JsonNode json)
         {
             source.enumStringValues = json.ArrayItems().Select(x => x.GetString()).ToArray();
             source.type = JsonSchemaType.EnumString;
         }
 
-        void ParseAnyOfAsEnum(ref JsonSchemaSource source, ListTreeNode<JsonValue> json)
+        void ParseAnyOfAsEnum(ref JsonSchemaSource source, JsonNode json)
         {
             List<int> values = new List<int>();
             List<string> stringValues = new List<string>();
@@ -378,7 +383,7 @@ namespace UniGLTF.JsonSchema
             throw new NotImplementedException();
         }
 
-        JsonSchemaSource AllOf(ListTreeNode<JsonValue> json, string jsonPath)
+        JsonSchemaSource AllOf(JsonNode json, string jsonPath)
         {
             string refValue = null;
             int count = 0;

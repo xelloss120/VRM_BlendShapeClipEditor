@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UniJSON;
 using UnityEngine;
-
+using VRMShaders;
 
 namespace UniGLTF
 {
@@ -98,37 +98,30 @@ namespace UniGLTF
         public void UniGLTFSimpleSceneTest()
         {
             var go = CreateSimpleScene();
-            var context = new ImporterContext();
 
-            try
+            // export
+            var data = new ExportingGltfData();
+
+            string json = null;
+            using (var exporter = new gltfExporter(data, new GltfExportSettings()))
             {
-                // export
-                var gltf = new glTF();
+                exporter.Prepare(go);
+                exporter.Export(new EditorTextureSerializer());
 
-                string json = null;
-                using (var exporter = new gltfExporter(gltf))
-                {
-                    exporter.Prepare(go);
-                    exporter.Export(MeshExportSettings.Default);
+                // remove empty buffer
+                data.GLTF.buffers.Clear();
 
-                    // remove empty buffer
-                    gltf.buffers.Clear();
-
-                    json = gltf.ToJson();
-                }
-
-                // import
-                context.ParseJson(json, new SimpleStorage(new ArraySegment<byte>()));
-                //Debug.LogFormat("{0}", context.Json);
-                context.Load();
-
-                AssertAreEqual(go.transform, context.Root.transform);
+                json = data.GLTF.ToJson();
             }
-            finally
+
+            // parse
+            var parsed = GltfData.CreateFromExportForTest(data);
+
+            // import
+            using (var context = new ImporterContext(parsed))
+            using (var loaded = context.Load())
             {
-                //Debug.LogFormat("Destroy, {0}", go.name);
-                GameObject.DestroyImmediate(go);
-                context.EditorDestroyRootAndAssets();
+                AssertAreEqual(go.transform, loaded.transform);
             }
         }
 
@@ -136,7 +129,8 @@ namespace UniGLTF
         {
             var initBytes = init == 0 ? null : new byte[init];
             var storage = new ArrayByteBuffer(initBytes);
-            var buffer = new glTFBuffer(storage);
+            var data = new ExportingGltfData();
+            // var buffer = new glTFBuffer(storage);
 
             var values = new List<byte>();
             int offset = 0;
@@ -146,11 +140,11 @@ namespace UniGLTF
                 values.AddRange(nums);
                 var bytes = new ArraySegment<Byte>(nums);
                 offset += x;
-                buffer.Append(bytes, glBufferTarget.NONE);
+                data.ExtendBufferAndGetView(bytes, glBufferTarget.NONE);
             }
 
-            Assert.AreEqual(values.Count, buffer.byteLength);
-            Assert.True(Enumerable.SequenceEqual(values, buffer.GetBytes().ToArray()));
+            Assert.AreEqual(values.Count, data.GLTF.buffers[0].byteLength);
+            Assert.True(Enumerable.SequenceEqual(values, data.BinBytes.ToArray()));
         }
 
         [Test]
@@ -191,12 +185,12 @@ namespace UniGLTF
         [Test]
         public void VersionChecker()
         {
-            Assert.False(ImporterContext.IsGeneratedUniGLTFAndOlderThan("hoge", 1, 16));
-            Assert.False(ImporterContext.IsGeneratedUniGLTFAndOlderThan("UniGLTF-1.16", 1, 16));
-            Assert.True(ImporterContext.IsGeneratedUniGLTFAndOlderThan("UniGLTF-1.15", 1, 16));
-            Assert.False(ImporterContext.IsGeneratedUniGLTFAndOlderThan("UniGLTF-11.16", 1, 16));
-            Assert.True(ImporterContext.IsGeneratedUniGLTFAndOlderThan("UniGLTF-0.16", 1, 16));
-            Assert.True(ImporterContext.IsGeneratedUniGLTFAndOlderThan("UniGLTF", 1, 16));
+            Assert.False(glTFExtensions.IsGeneratedUniGLTFAndOlderThan("hoge", 1, 16));
+            Assert.False(glTFExtensions.IsGeneratedUniGLTFAndOlderThan("UniGLTF-1.16", 1, 16));
+            Assert.True(glTFExtensions.IsGeneratedUniGLTFAndOlderThan("UniGLTF-1.15", 1, 16));
+            Assert.False(glTFExtensions.IsGeneratedUniGLTFAndOlderThan("UniGLTF-11.16", 1, 16));
+            Assert.True(glTFExtensions.IsGeneratedUniGLTFAndOlderThan("UniGLTF-0.16", 1, 16));
+            Assert.True(glTFExtensions.IsGeneratedUniGLTFAndOlderThan("UniGLTF", 1, 16));
         }
 
         [Test]
@@ -300,14 +294,14 @@ namespace UniGLTF
         [Test]
         public void GlTFToJsonTest()
         {
-            var gltf = new glTF();
-            using (var exporter = new gltfExporter(gltf))
+            var data = new ExportingGltfData();
+            using (var exporter = new gltfExporter(data, new GltfExportSettings()))
             {
                 exporter.Prepare(CreateSimpleScene());
-                exporter.Export(MeshExportSettings.Default);
+                exporter.Export(new EditorTextureSerializer());
             }
 
-            var expected = gltf.ToJson().ParseAsJson();
+            var expected = data.GLTF.ToJson().ParseAsJson();
             expected.AddKey(Utf8String.From("meshes"));
             expected.AddValue(default(ArraySegment<byte>), ValueNodeType.Array);
             expected["meshes"].AddValue(default(ArraySegment<byte>), ValueNodeType.Object);
@@ -341,7 +335,7 @@ namespace UniGLTF
             primitive["targets"][1].AddKey(Utf8String.From("TANGENT"));
             primitive["targets"][1].AddValue(Utf8String.From("0").Bytes, ValueNodeType.Integer);
 
-            gltf.meshes.Add(new glTFMesh("test")
+            data.GLTF.meshes.Add(new glTFMesh("test")
             {
                 primitives = new List<glTFPrimitives>
                 {
@@ -369,7 +363,7 @@ namespace UniGLTF
                     }
                 }
             });
-            var actual = gltf.ToJson().ParseAsJson();
+            var actual = data.GLTF.ToJson().ParseAsJson();
 
             Assert.AreEqual(expected, actual);
         }
@@ -439,7 +433,7 @@ namespace UniGLTF
         public void SkinTestEmptyName()
         {
             var model = new glTFSkin()
-            {                
+            {
                 name = "",
                 inverseBindMatrices = 4,
                 joints = new int[] { 1 },
@@ -535,12 +529,13 @@ namespace UniGLTF
                 }
 
                 // export
-                var gltf = new glTF();
+                var data = new ExportingGltfData();
+                var gltf = data.GLTF;
                 var json = default(string);
-                using (var exporter = new gltfExporter(gltf))
+                using (var exporter = new gltfExporter(data, new GltfExportSettings()))
                 {
                     exporter.Prepare(go);
-                    exporter.Export(UniGLTF.MeshExportSettings.Default);
+                    exporter.Export(new EditorTextureSerializer());
 
                     json = gltf.ToJson();
                 }
@@ -559,43 +554,162 @@ namespace UniGLTF
 
                 // import
                 {
-                    var context = new ImporterContext();
-                    context.ParseJson(json, new SimpleStorage(new ArraySegment<byte>(new byte[1024 * 1024])));
-                    //Debug.LogFormat("{0}", context.Json);
-                    context.Load();
+                    var parsed = GltfData.CreateFromExportForTest(data);
+                    using (var context = new ImporterContext(parsed))
+                    using (var loaded = context.Load())
+                    {
+                        var importedRed = loaded.transform.GetChild(0);
+                        var importedRedMaterial = importedRed.GetComponent<Renderer>().sharedMaterial;
+                        Assert.AreEqual("red", importedRedMaterial.name);
+                        Assert.AreEqual(Color.red, importedRedMaterial.color);
 
-                    var importedRed = context.Root.transform.GetChild(0);
-                    var importedRedMaterial = importedRed.GetComponent<Renderer>().sharedMaterial;
-                    Assert.AreEqual("red", importedRedMaterial.name);
-                    Assert.AreEqual(Color.red, importedRedMaterial.color);
-
-                    var importedBlue = context.Root.transform.GetChild(1);
-                    var importedBlueMaterial = importedBlue.GetComponent<Renderer>().sharedMaterial;
-                    Assert.AreEqual("blue", importedBlueMaterial.name);
-                    Assert.AreEqual(Color.blue, importedBlueMaterial.color);
+                        var importedBlue = loaded.transform.GetChild(1);
+                        var importedBlueMaterial = importedBlue.GetComponent<Renderer>().sharedMaterial;
+                        Assert.AreEqual("blue", importedBlueMaterial.name);
+                        Assert.AreEqual(Color.blue, importedBlueMaterial.color);
+                    }
                 }
 
                 // import new version
                 {
-                    var context = new ImporterContext();
-                    context.ParseJson(json, new SimpleStorage(new ArraySegment<byte>(new byte[1024 * 1024])));
-                    //Debug.LogFormat("{0}", context.Json);
-                    context.Load();
+                    var parsed = GltfData.CreateFromExportForTest(data);
+                    using (var context = new ImporterContext(parsed))
+                    using (var loaded = context.Load())
+                    {
+                        var importedRed = loaded.transform.GetChild(0);
+                        var importedRedMaterial = importedRed.GetComponent<Renderer>().sharedMaterial;
+                        Assert.AreEqual("red", importedRedMaterial.name);
+                        Assert.AreEqual(Color.red, importedRedMaterial.color);
 
-                    var importedRed = context.Root.transform.GetChild(0);
-                    var importedRedMaterial = importedRed.GetComponent<Renderer>().sharedMaterial;
-                    Assert.AreEqual("red", importedRedMaterial.name);
-                    Assert.AreEqual(Color.red, importedRedMaterial.color);
-
-                    var importedBlue = context.Root.transform.GetChild(1);
-                    var importedBlueMaterial = importedBlue.GetComponent<Renderer>().sharedMaterial;
-                    Assert.AreEqual("blue", importedBlueMaterial.name);
-                    Assert.AreEqual(Color.blue, importedBlueMaterial.color);
+                        var importedBlue = loaded.transform.GetChild(1);
+                        var importedBlueMaterial = importedBlue.GetComponent<Renderer>().sharedMaterial;
+                        Assert.AreEqual("blue", importedBlueMaterial.name);
+                        Assert.AreEqual(Color.blue, importedBlueMaterial.color);
+                    }
                 }
             }
             finally
             {
                 GameObject.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void MeshHasNoRendererTest()
+        {
+            var go = new GameObject("mesh_has_no_renderer");
+            try
+            {
+                {
+                    var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    cube.transform.SetParent(go.transform);
+                    UnityEngine.Object.DestroyImmediate(cube.GetComponent<MeshRenderer>());
+                }
+
+                // export
+                var data = new ExportingGltfData();
+                var gltf = data.GLTF;
+                string json;
+                using (var exporter = new gltfExporter(data, new GltfExportSettings()))
+                {
+                    exporter.Prepare(go);
+                    exporter.Export(new EditorTextureSerializer());
+
+                    json = gltf.ToJson();
+                }
+
+                Assert.AreEqual(0, gltf.meshes.Count);
+                Assert.AreEqual(1, gltf.nodes.Count);
+                Assert.AreEqual(-1, gltf.nodes[0].mesh);
+
+                // import
+                {
+                    var parsed = GltfData.CreateFromExportForTest(data);
+                    using (var context = new ImporterContext(parsed))
+                    using (var loaded = context.Load())
+                    {
+                        Assert.AreEqual(1, loaded.transform.GetChildren().Count());
+                        {
+                            var child = loaded.transform.GetChild(0);
+                            Assert.IsNull(child.GetSharedMesh());
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                GameObject.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void ExportingNullMeshTest()
+        {
+            var validator = ScriptableObject.CreateInstance<MeshExportValidator>();
+            var root = new GameObject("root");
+
+            try
+            {
+                {
+                    var child = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    child.transform.SetParent(root.transform);
+                    // remove MeshFilter
+                    Component.DestroyImmediate(child.GetComponent<MeshFilter>());
+                }
+
+                {
+                    var child = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    child.transform.SetParent(root.transform);
+                    // set null
+                    child.GetComponent<MeshFilter>().sharedMesh = null;
+                }
+
+                // validate
+                validator.SetRoot(root, new GltfExportSettings(), new DefualtBlendShapeExportFilter());
+                var vs = validator.Validate(root);
+                Assert.True(vs.All(x => x.CanExport));
+
+                // export
+                var data = new ExportingGltfData();
+                var gltf = data.GLTF;
+                string json;
+                using (var exporter = new gltfExporter(data, new GltfExportSettings()))
+                {
+                    exporter.Prepare(root);
+                    exporter.Export(new EditorTextureSerializer());
+
+                    json = gltf.ToJson();
+                }
+
+                Assert.AreEqual(0, gltf.meshes.Count);
+                Assert.AreEqual(2, gltf.nodes.Count);
+                Assert.AreEqual(-1, gltf.nodes[0].mesh);
+                Assert.AreEqual(-1, gltf.nodes[1].mesh);
+
+                // import
+                {
+                    var parsed = GltfData.CreateFromExportForTest(data);
+                    using (var context = new ImporterContext(parsed))
+                    using (var loaded = context.Load())
+                    {
+                        Assert.AreEqual(2, loaded.transform.GetChildren().Count());
+
+                        {
+                            var child = loaded.transform.GetChild(0);
+                            Assert.IsNull(child.GetSharedMesh());
+                        }
+
+                        {
+                            var child = loaded.transform.GetChild(1);
+                            Assert.IsNull(child.GetSharedMesh());
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                GameObject.DestroyImmediate(root);
+                ScriptableObject.DestroyImmediate(validator);
             }
         }
 

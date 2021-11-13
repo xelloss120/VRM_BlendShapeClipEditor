@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using MeshUtility;
+using UniGLTF;
 using UnityEngine;
 
 namespace VRM
@@ -15,19 +15,19 @@ namespace VRM
         {
             if (r.Renderer == null)
             {
-                validation = Validation.Error($"{name}.Renderer is null", extended);
+                validation = Validation.Error($"{name}.Renderer is null", ValidationContext.Create(extended));
                 return false;
             }
 
             if (!Hierarchy.Contains(r.Renderer.transform))
             {
-                validation = Validation.Error($"{name}.Renderer is out of hierarchy", extended);
+                validation = Validation.Error($"{name}.Renderer is out of hierarchy", ValidationContext.Create(extended));
                 return false;
             }
 
             if (!r.Renderer.EnableForExport())
             {
-                validation = Validation.Error($"{name}.Renderer is not active", extended);
+                validation = Validation.Error($"{name}.Renderer is not active", ValidationContext.Create(extended));
                 return false;
             }
 
