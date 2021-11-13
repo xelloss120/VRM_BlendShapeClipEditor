@@ -59,6 +59,13 @@ public class Vrm : MonoBehaviour
 
         VRM = loaded.Root;
 
+        // 重力設定による再出力時の変形を防ぐため無効に設定
+        var sb_list = VRM.GetComponentsInChildren<VRMSpringBone>();
+        foreach (var sb in sb_list)
+        {
+            sb.enabled = false;
+        }
+
         // 3Dビューの初期表示位置を頭に設定
         var anim = VRM.GetComponent<Animator>();
         var head = anim.GetBoneTransform(HumanBodyBones.Head);
