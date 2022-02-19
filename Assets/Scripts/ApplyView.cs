@@ -16,6 +16,14 @@ public class ApplyView : MonoBehaviour
 
         RenderTexture.active = cam;
         tex.ReadPixels(new Rect(0, 0, cam.width, cam.height), 0, 0);
+        var color = tex.GetPixels();
+        for (int i = 0; i < color.Length; i++)
+        {
+            color[i].r = Mathf.LinearToGammaSpace(color[i].r);
+            color[i].g = Mathf.LinearToGammaSpace(color[i].g);
+            color[i].b = Mathf.LinearToGammaSpace(color[i].b);
+        }
+        tex.SetPixels(color);
         tex.Apply();
 
         Image.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), Vector2.zero); ;
