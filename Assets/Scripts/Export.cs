@@ -10,7 +10,7 @@ public class Export : MonoBehaviour
     /// <summary>
     /// エクスポート（vrmとcsvを一緒に保存）
     /// </summary>
-    public void Save()
+    public void Save(bool Reduce)
     {
 #if UNITY_EDITOR
         var path = Application.dataPath + "/../_Debug/Export.vrm";
@@ -26,7 +26,17 @@ public class Export : MonoBehaviour
             path += ".vrm";
         }
 
-        Vrm.Save(path);
+        Vrm.Save(path, Reduce);
         Csv.Save(path.Replace(".vrm", ".csv"));
+    }
+    
+    public void SaveNormal()
+    {
+        Save(false);
+    }
+    
+    public void SaveBake()
+    {
+        Save(true);
     }
 }
